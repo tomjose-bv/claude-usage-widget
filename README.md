@@ -7,7 +7,10 @@ Session ━━━━━━━━━━━━  61% left   2h 14m
 Weekly  ━━━━━━━━━━━━  83% left   4d 6h
 ```
 
-<!-- Screenshot placeholder: docs/screenshots/widget.png (the overlay on the taskbar) -->
+![The widget: Session 82% left with a green bar and 4h 27m to reset; Weekly 50% left with an amber bar and 4d 1h to reset; a green status dot top right](docs/media/widget.png)
+
+*A real capture of the running widget (shown at 2x). Green bar: more than 50% left; amber: more than 20% left. The dot shows the last poll succeeded.*
+
 <!-- Screenshot placeholder: docs/screenshots/history.png (right-click > History window) -->
 
 ## Why
