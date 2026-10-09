@@ -34,9 +34,11 @@ If you use Claude Code all day, the limits are the thing that interrupts you. Th
 
 ## Install
 
-Clone or download this repository (green **Code** button → *Download ZIP*, then extract), open PowerShell in the folder, and run:
+Clone the repository (or use the green **Code** button → *Download ZIP* and extract it), then run the installer from that folder:
 
 ```powershell
+git clone https://github.com/tomjose-bv/claude-usage-widget.git
+cd claude-usage-widget
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Startup
 ```
 
