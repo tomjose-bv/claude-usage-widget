@@ -2,3 +2,10 @@ position.txt
 *.bak
 *.bak2
 *.lnk
+history.jsonl
+*.jsonl
+testResults.xml
+coverage.xml
+
+# local-only list of blocked names
+.employer-terms
