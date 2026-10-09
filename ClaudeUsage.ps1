@@ -9,6 +9,7 @@ $mutex = New-Object System.Threading.Mutex($false, 'Local\ClaudeUsageWidget')
 if (-not $mutex.WaitOne(0)) { exit }
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+. (Join-Path $PSScriptRoot 'ClaudeUsage.History.ps1')
 Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class W {
@@ -30,6 +31,7 @@ $FetchEvery  = 300   # seconds between API calls (the endpoint rate-limits aggre
 $RetryEvery  = 60    # seconds between retries after a non-rate-limit error
 $BackoffMax  = 1800  # cap for the 429 backoff
 $StaleAfter  = 3600  # keep showing last-known numbers (marked stale) for this long
+$HistoryPath = Join-Path $env:LOCALAPPDATA 'ClaudeUsageWidget\history.jsonl'   # local only, capped at ~5000 samples
 
 $script:data        = $null
 $script:err         = 'Loading...'
@@ -48,6 +50,11 @@ function Update-Usage {
         $script:err = $null
         $script:lastOk = Get-Date
         $script:backoff = 0
+        # Record a local history sample; never let a disk problem break the widget.
+        try {
+            $rec = ConvertTo-HistoryRecord $script:data
+            if ($rec) { Add-HistoryRecord -Path $HistoryPath -Record $rec }
+        } catch {}
     } catch {
         $code = $null; $retryAfter = 0
         if ($_.Exception.Response) {
@@ -179,8 +186,20 @@ $form.Add_MouseDown({
 })
 
 # ---------- right-click menu ----------
+$script:histForm = $null
+function Show-History {
+    if ($script:histForm -and -not $script:histForm.IsDisposed) { $script:histForm.Activate(); return }
+    try {
+        $script:histForm = New-HistoryForm -HistoryPath $HistoryPath -Scale $scale -Data $script:data
+        $script:histForm.Show()
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Could not open history: $($_.Exception.Message)", 'Claude Usage') | Out-Null
+    }
+}
+
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $menu.Items.Add('Refresh now').Add_Click({ Update-Usage; $form.Invalidate() }) | Out-Null
+$menu.Items.Add('History').Add_Click({ Show-History }) | Out-Null
 $menu.Items.Add('Open usage page').Add_Click({ Start-Process 'https://claude.ai/settings/usage' }) | Out-Null
 $menu.Items.Add('Reset position').Add_Click({
     $form.Location = Get-DefaultLocation
