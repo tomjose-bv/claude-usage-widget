@@ -51,7 +51,7 @@ Describe 'Format-Left' {
 
 Describe 'Get-UsageRows' {
     It 'returns Session and Weekly rows with used and left percentages' {
-        $rows = Get-UsageRows (New-Usage 14.0 '2026-01-15T15:00:00+00:00' 35 '2026-01-19T13:00:00+00:00')
+        $rows = @(Get-UsageRows (New-Usage 14.0 '2026-01-15T15:00:00+00:00' 35 '2026-01-19T13:00:00+00:00'))
         $rows.Count | Should -Be 2
         $rows[0].Name | Should -Be 'Session'
         $rows[0].Used | Should -Be 14
@@ -61,17 +61,17 @@ Describe 'Get-UsageRows' {
         $rows[1].Resets | Should -Be '2026-01-19T13:00:00+00:00'
     }
     It 'clamps out-of-range utilization to 0..100' {
-        $rows = Get-UsageRows (New-Usage 130 $null -5 $null)
+        $rows = @(Get-UsageRows (New-Usage 130 $null -5 $null))
         $rows[0].Left | Should -Be 0
         $rows[1].Left | Should -Be 100
     }
     It 'keeps fractional utilization' {
-        $rows = Get-UsageRows (New-Usage 12.5 $null 0.4 $null)
+        $rows = @(Get-UsageRows (New-Usage 12.5 $null 0.4 $null))
         $rows[0].Left | Should -Be 87.5
         $rows[1].Used | Should -Be 0.4
     }
     It 'skips a window that is null or missing' {
-        $rows = Get-UsageRows ([pscustomobject]@{ five_hour = $null; seven_day = [pscustomobject]@{ utilization = 10; resets_at = $null } })
+        $rows = @(Get-UsageRows ([pscustomobject]@{ five_hour = $null; seven_day = [pscustomobject]@{ utilization = 10; resets_at = $null } }))
         $rows.Count | Should -Be 1
         $rows[0].Name | Should -Be 'Weekly'
         $rows[0].Resets | Should -BeNullOrEmpty
@@ -81,14 +81,14 @@ Describe 'Get-UsageRows' {
             five_hour = [pscustomobject]@{ resets_at = '2026-01-15T15:00:00+00:00' }
             seven_day = [pscustomobject]@{ utilization = 'n/a' }
         }
-        (Get-UsageRows $data).Count | Should -Be 0
+        @(Get-UsageRows $data).Count | Should -Be 0
     }
     It 'ignores unrelated fields and handles $null / empty responses' {
-        (Get-UsageRows $null).Count | Should -Be 0
-        (Get-UsageRows ([pscustomobject]@{ extra_usage = @{ is_enabled = $false } })).Count | Should -Be 0
+        @(Get-UsageRows $null).Count | Should -Be 0
+        @(Get-UsageRows ([pscustomobject]@{ extra_usage = @{ is_enabled = $false } })).Count | Should -Be 0
     }
     It 'accepts hashtables as well as objects' {
-        $rows = Get-UsageRows @{ five_hour = @{ utilization = 50; resets_at = $null } }
+        $rows = @(Get-UsageRows @{ five_hour = @{ utilization = 50; resets_at = $null } })
         $rows[0].Left | Should -Be 50
     }
 }
@@ -196,7 +196,7 @@ Describe 'History file' {
             $rec = ConvertTo-HistoryRecord (New-Usage (10 + $i) '2026-01-15T15:00:00+00:00' 30 '2026-01-19T13:00:00+00:00') -Timestamp $script:Now.AddMinutes(5 * $i)
             Add-HistoryRecord -Path $script:Path -Record $rec
         }
-        $h = Read-History -Path $script:Path
+        $h = @(Read-History -Path $script:Path)
         $h.Count | Should -Be 3
         $h[2].Session | Should -Be 12
         $h[2].Weekly | Should -Be 30
@@ -207,7 +207,7 @@ Describe 'History file' {
         foreach ($i in 1..12) {
             Add-HistoryRecord -Path $script:Path -MaxRecords 5 -Record ([pscustomobject]@{ ts = $script:Now.AddMinutes($i).ToString('o'); session = $i; weekly = 1 })
         }
-        $h = Read-History -Path $script:Path
+        $h = @(Read-History -Path $script:Path)
         $h.Count | Should -Be 5
         $h[0].Session | Should -Be 8
         $h[-1].Session | Should -Be 12
@@ -222,13 +222,13 @@ Describe 'History file' {
         )
         New-Item -ItemType Directory -Path (Split-Path $script:Path) -Force | Out-Null
         Set-Content -Path $script:Path -Value $lines -Encoding UTF8
-        $h = Read-History -Path $script:Path -Since $script:Now.AddDays(-7)
+        $h = @(Read-History -Path $script:Path -Since $script:Now.AddDays(-7))
         $h.Count | Should -Be 1
         $h[0].Session | Should -Be 20
         $h[0].Weekly | Should -BeNullOrEmpty
     }
     It 'returns an empty list when the file does not exist' {
-        (Read-History -Path (Join-Path $TestDrive 'missing.jsonl')).Count | Should -Be 0
+        @(Read-History -Path (Join-Path $TestDrive 'missing.jsonl')).Count | Should -Be 0
     }
 }
 

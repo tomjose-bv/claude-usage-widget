@@ -57,10 +57,11 @@ function Get-UsageRows {
       Turns the /api/oauth/usage response into display rows:
         Name ('Session'|'Weekly'), Used (0-100), Left (0-100), Resets (raw resets_at).
       Windows that are missing, null, or have no numeric utilization are skipped.
+      Emits zero or more rows; wrap calls in @() to always get an array.
     #>
     param($Data)
     $rows = @()
-    if ($null -eq $Data) { return ,$rows }
+    if ($null -eq $Data) { return }
     foreach ($w in $script:Windows) {
         $win = Get-Prop $Data $w.Key
         if ($null -eq $win) { continue }
@@ -76,7 +77,7 @@ function Get-UsageRows {
             Resets = Get-Prop $win 'resets_at'
         }
     }
-    return ,$rows
+    return $rows
 }
 
 # ---------------------------------------------------------------- colour levels
@@ -153,7 +154,7 @@ function Get-DisplayState {
 function ConvertTo-HistoryRecord {
     <# Builds a history record from a usage response. Returns $null if the response has no usable windows. #>
     param($Data, [datetime]$Timestamp = [datetime]::UtcNow)
-    $rows = Get-UsageRows $Data
+    $rows = @(Get-UsageRows $Data)
     if ($rows.Count -eq 0) { return $null }
     $rec = [ordered]@{ ts = $Timestamp.ToUniversalTime().ToString('o', $script:Inv) }
     foreach ($pair in @(@('Session', 'session'), @('Weekly', 'weekly'))) {
@@ -185,12 +186,12 @@ function Add-HistoryRecord {
 
 function Read-History {
     <#
-      Reads history records newer than -Since (UTC), oldest first. Corrupt or partial lines are skipped.
+      Reads history records newer than -Since (UTC), oldest first. Corrupt or partial lines are skipped. Wrap calls in @().
       Each record: Time (UTC datetime), Session, Weekly (0-100 or $null), SessionResets, WeeklyResets (UTC datetime or $null).
     #>
     param([Parameter(Mandatory)][string]$Path, $Since = $null)
     $out = New-Object System.Collections.Generic.List[object]
-    if (-not (Test-Path $Path)) { return ,@() }
+    if (-not (Test-Path $Path)) { return }
     $sinceUtc = if ($Since) { ([datetime]$Since).ToUniversalTime() } else { [datetime]::MinValue }
     foreach ($line in [IO.File]::ReadAllLines($Path)) {
         if (-not $line.Trim()) { continue }
@@ -208,7 +209,7 @@ function Read-History {
             })
         } catch { continue }
     }
-    return ,@($out | Sort-Object Time)
+    return $out | Sort-Object Time
 }
 
 function Get-BurnEstimate {
