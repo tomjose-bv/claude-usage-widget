@@ -1,6 +1,9 @@
 # Claude Usage Widget - always-on-top taskbar overlay showing remaining Claude usage.
 # Data source: the same endpoint Claude Code's /usage uses, authenticated with
 # the Claude Code login stored in ~/.claude/.credentials.json (read-only).
+# Pure logic (parsing, formatting, backoff, history) lives in ClaudeUsage.Core.psm1.
+
+Import-Module (Join-Path $PSScriptRoot 'ClaudeUsage.Core.psm1') -Force -DisableNameChecking
 
 $mutex = New-Object System.Threading.Mutex($false, 'Local\ClaudeUsageWidget')
 if (-not $mutex.WaitOne(0)) { exit }
@@ -46,44 +49,18 @@ function Update-Usage {
         $script:lastOk = Get-Date
         $script:backoff = 0
     } catch {
-        $code = $null
-        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-        if ($code -eq 401)     { $script:err = 'Login expired - open Claude Code'; $script:backoff = 0 }
-        elseif ($code -eq 429) {
-            $retryAfter = 0
+        $code = $null; $retryAfter = 0
+        if ($_.Exception.Response) {
+            $code = [int]$_.Exception.Response.StatusCode
             try { $retryAfter = [int]$_.Exception.Response.Headers['Retry-After'] } catch {}
-            $script:backoff = [math]::Min($BackoffMax, [math]::Max([math]::Max($retryAfter, $FetchEvery), $script:backoff * 2))
-            $script:err = 'Rate limited, retry in {0}m' -f [int][math]::Ceiling($script:backoff / 60)
         }
-        else                   { $script:err = 'Offline, retrying' }
+        $f = Get-FailureState -StatusCode $code -RetryAfter $retryAfter -Backoff $script:backoff -FetchEvery $FetchEvery -Max $BackoffMax
+        $script:err = $f.Message
+        $script:backoff = $f.Backoff
     }
 }
 
-function Get-ResetUtc($v) {
-    if ($v -is [datetime]) { return $v.ToUniversalTime() }
-    return [datetimeoffset]::Parse([string]$v).UtcDateTime
-}
-
-function Format-Left($resetsAt) {
-    if (-not $resetsAt) { return '--' }
-    $t = (Get-ResetUtc $resetsAt) - [datetime]::UtcNow
-    if ($t.TotalSeconds -le 0) { return 'now' }
-    if ($t.TotalDays  -ge 1) { return '{0}d {1}h'     -f [int][math]::Floor($t.TotalDays),  $t.Hours }
-    if ($t.TotalHours -ge 1) { return '{0}h {1:00}m'  -f [int][math]::Floor($t.TotalHours), $t.Minutes }
-    return '{0}m' -f [int][math]::Ceiling($t.TotalMinutes)
-}
-
-function Get-Rows {
-    $rows = @()
-    foreach ($p in @(@('Session', 'five_hour'), @('Weekly', 'seven_day'))) {
-        $w = $script:data.($p[1])
-        if ($w) {
-            $left = [math]::Max(0, [math]::Min(100, 100 - [double]$w.utilization))
-            $rows += [pscustomobject]@{ Name = $p[0]; Left = $left; Resets = $w.resets_at }
-        }
-    }
-    return $rows
-}
+function Get-Rows { @(Get-UsageRows $script:data) }
 
 # ---------- window ----------
 $form = New-Object System.Windows.Forms.Form
@@ -134,10 +111,9 @@ $brRed     = New-Object Drawing.SolidBrush([Drawing.Color]::FromArgb(230, 95, 90
 $brGreen   = New-Object Drawing.SolidBrush([Drawing.Color]::FromArgb(110, 190, 120))
 $brAmber   = New-Object Drawing.SolidBrush([Drawing.Color]::FromArgb(225, 175, 70))
 
-function Get-LevelBrush($left) {
-    if ($left -gt 50) { return [Drawing.Color]::FromArgb(110, 190, 120) }
-    if ($left -gt 20) { return [Drawing.Color]::FromArgb(225, 175, 70) }
-    return [Drawing.Color]::FromArgb(230, 95, 90)
+function Get-LevelColor($left) {
+    $rgb = Get-LevelRgb (Get-UsageLevel $left)
+    return [Drawing.Color]::FromArgb($rgb[0], $rgb[1], $rgb[2])
 }
 
 $form.Add_Paint({
@@ -148,10 +124,10 @@ $form.Add_Paint({
     $g.ScaleTransform($scale, $scale)
 
     # Live = latest fetch succeeded recently. Otherwise keep showing last-known numbers (amber dot) for a while.
-    $age   = if ($script:lastOk) { ((Get-Date) - $script:lastOk).TotalSeconds } else { [double]::MaxValue }
-    $live  = $script:data -and -not $script:err -and $age -lt ($FetchEvery + 30)
-    $stale = $script:data -and -not $live -and $age -lt $StaleAfter
-    $rows  = if ($live -or $stale) { @(Get-Rows) } else { @() }
+    $state = Get-DisplayState -HasData ([bool]$script:data) -HasError ([bool]$script:err) -LastOk $script:lastOk `
+                              -FetchEvery $FetchEvery -StaleAfter $StaleAfter
+    $live  = $state -eq 'Live'
+    $rows  = if ($state -ne 'None') { @(Get-Rows) } else { @() }
     if ($rows.Count -eq 0) {
         $msg = if ($script:err) { $script:err } else { 'Updating...' }
         if ($script:lastOk) { $msg += ' - last ' + $script:lastOk.ToString('HH:mm') }
@@ -164,7 +140,7 @@ $form.Add_Paint({
     foreach ($r in $rows) {
         $g.DrawString($r.Name, $fontLabel, $brGray, 6, $y)
         $g.FillRectangle($brTrack, 58, $y + 6, 60, 5)
-        $fill = New-Object Drawing.SolidBrush((Get-LevelBrush $r.Left))
+        $fill = New-Object Drawing.SolidBrush((Get-LevelColor $r.Left))
         $g.FillRectangle($fill, 58, $y + 6, [single](60 * $r.Left / 100), 5)
         $fill.Dispose()
         $g.DrawString(('{0:0}% left' -f $r.Left), $fontValue, $brWhite, 124, $y)
@@ -181,7 +157,8 @@ $form.Add_MouseEnter({
     $lines = @()
     if ($script:data) {
         foreach ($r in Get-Rows) {
-            $at = (Get-ResetUtc $r.Resets).ToLocalTime().ToString('ddd HH:mm')
+            $reset = Get-ResetUtc $r.Resets
+            $at = if ($reset) { $reset.ToLocalTime().ToString('ddd HH:mm') } else { 'unknown' }
             $lines += '{0}: {1:0}% left - resets in {2} ({3})' -f $r.Name, $r.Left, (Format-Left $r.Resets), $at
         }
     }
@@ -230,7 +207,7 @@ $timer.Add_Tick({
     # Retry immediately after a fresh login / token refresh rewrites the credentials file
     $stamp = (Get-Item $CredPath -ErrorAction SilentlyContinue).LastWriteTimeUtc
     if ($script:err -and $stamp -and $stamp -ne $script:credStamp) { Update-Usage }
-    $wait = if ($script:backoff -gt 0) { $script:backoff } elseif ($script:err) { $RetryEvery } else { $FetchEvery }
+    $wait = Get-PollWait -Backoff $script:backoff -HasError ([bool]$script:err) -RetryEvery $RetryEvery -FetchEvery $FetchEvery
     if (((Get-Date) - $script:lastAttempt).TotalSeconds -ge $wait) { Update-Usage }
     $form.Invalidate()
 })
