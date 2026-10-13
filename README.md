@@ -1,5 +1,7 @@
 # Claude Usage Widget
 
+[![CI](https://github.com/tomjose-bv/claude-usage-widget/actions/workflows/ci.yml/badge.svg)](https://github.com/tomjose-bv/claude-usage-widget/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A tiny always-on-top Windows overlay that shows how much of your **Claude** plan is left — session and weekly — right on the taskbar. No browser tab, no typing `/usage`.
 
 ```
