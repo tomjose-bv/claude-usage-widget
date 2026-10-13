@@ -5,6 +5,12 @@
 Set-StrictMode -Version 2.0
 
 $script:Inv = [Globalization.CultureInfo]::InvariantCulture
+$script:WidgetVersion = '0.1.0'
+
+function Get-WidgetVersion {
+    <# The widget's release version (semantic versioning). #>
+    return $script:WidgetVersion
+}
 
 # ---------------------------------------------------------------- time helpers
 
@@ -280,6 +286,6 @@ function Format-Duration {
     return '{0}m' -f [int][math]::Round($t.TotalMinutes)
 }
 
-Export-ModuleMember -Function Get-ResetUtc, Format-Left, Get-WindowHours, Get-UsageRows, Get-UsageLevel, Get-LevelRgb,
+Export-ModuleMember -Function Get-WidgetVersion, Get-ResetUtc, Format-Left, Get-WindowHours, Get-UsageRows, Get-UsageLevel, Get-LevelRgb,
     Get-NextBackoff, Get-FailureState, Get-PollWait, Get-DisplayState,
     ConvertTo-HistoryRecord, Add-HistoryRecord, Read-History, Get-BurnEstimate, Get-HistorySummary, Format-Duration

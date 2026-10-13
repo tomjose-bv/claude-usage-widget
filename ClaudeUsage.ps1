@@ -171,7 +171,7 @@ $form.Add_MouseEnter({
     }
     if ($script:lastOk) { $lines += 'Updated ' + $script:lastOk.ToString('HH:mm:ss') }
     if ($script:err)    { $lines += $script:err }
-    $lines += 'Drag to move - right-click for options'
+    $lines += 'Drag to move - right-click for options (v' + (Get-WidgetVersion) + ')'
     $tip.SetToolTip($form, ($lines -join "`n"))
 })
 

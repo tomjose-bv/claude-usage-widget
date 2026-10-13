@@ -12,6 +12,12 @@ BeforeAll {
     }
 }
 
+Describe 'Get-WidgetVersion' {
+    It 'returns a semantic version string' {
+        Get-WidgetVersion | Should -Match '^\d+\.\d+\.\d+$'
+    }
+}
+
 Describe 'Get-ResetUtc' {
     It 'parses an ISO-8601 offset timestamp to UTC' {
         $r = Get-ResetUtc '2026-01-15T14:30:00.321323+02:00'
